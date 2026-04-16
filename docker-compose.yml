@@ -17,6 +17,48 @@ services:
     restart: unless-stopped
     ports: ["6379:6379"]
 
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: pipegenie-etcd
+    restart: unless-stopped
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    command: etcd -advertise-client-urls=http://etcd:2379 -listen-client-urls=http://0.0.0.0:2379 --data-dir /etcd
+    volumes:
+      - etcd_data:/etcd
+
+  minio:
+    image: minio/minio:RELEASE.2024-01-16T16-07-38Z
+    container_name: pipegenie-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    command: minio server /minio_data
+    ports:
+      - "9001:9001"
+      - "9000:9000"
+    volumes:
+      - minio_data:/minio_data
+
+  milvus:
+    image: milvusdb/milvus:v2.4.4
+    container_name: pipegenie-milvus
+    restart: unless-stopped
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    depends_on: [etcd, minio]
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    volumes:
+      - milvus_data:/var/lib/milvus
+
   backend:
     build:
       context: ./backend
@@ -27,13 +69,13 @@ services:
     environment:
       - MONGODB_URL=mongodb://mongodb:27017
       - REDIS_URL=redis://redis:6379
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
       - OLLAMA_BASE_URL=http://ollama:11434
       - USE_OLLAMA=true
       - LLM_MODEL=mistral
     env_file: ./backend/.env
-    depends_on: [mongodb, redis]
-    volumes:
-      - ./chroma_db:/app/chroma_db
+    depends_on: [mongodb, redis, milvus]
 
   ollama:
     image: ollama/ollama:latest
@@ -54,4 +96,7 @@ services:
 
 volumes:
   mongo_data:
+  etcd_data:
+  minio_data:
+  milvus_data:
   ollama_data:

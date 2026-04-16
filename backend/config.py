@@ -31,8 +31,9 @@ class Settings(BaseSettings):
     USE_OLLAMA: bool = True            # True = local Ollama, False = Mistral API
     LLM_MODEL: str = "mistral"         # Ollama model name
 
-    # ChromaDB
-    CHROMA_PERSIST_DIR: str = "./chroma_db"
+    # MilvusDB
+    MILVUS_HOST: str = "localhost"
+    MILVUS_PORT: int = 19530
 
     # Docker
     DOCKER_NETWORK: str = "pipegenie-net"

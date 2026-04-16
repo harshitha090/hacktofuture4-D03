@@ -117,10 +117,18 @@ echo "================================"
 
 echo "=== Fix Script Completed ==="
 """
+
+            script_content = self._sanitize_script(script_content)
+
+            use_runner_image = self._image_exists()
+            image_name = FIX_CONTAINER_IMAGE if use_runner_image else "python:3.11-slim"
+            # pipegenie-runner image sets ENTRYPOINT to /bin/bash, so pass only args.
+            command = ["-c", script_content] if use_runner_image else ["bash", "-c", script_content]
+
             # Run container
             container = self.client.containers.run(
-                image=FIX_CONTAINER_IMAGE if self._image_exists() else "python:3.11-slim",
-                command=["bash", "-c", script_content],
+                image=image_name,
+                command=command,
                 environment={
                     "REPO_URL": repo_url,
                     "REPO_FULL_NAME": repo_full_name,
@@ -139,8 +147,7 @@ echo "=== Fix Script Completed ==="
                 remove=True,
                 detach=False,
                 stdout=True,
-                stderr=True,
-                timeout=300  # 5 min max
+                stderr=True
             )
 
             duration = time.time() - start_time
@@ -183,6 +190,22 @@ echo "=== Fix Script Completed ==="
     def _extract_fix_branch(self, output: str) -> str | None:
         match = re.search(r"PIPEGENIE_FIX_BRANCH=([^\s]+)", output or "")
         return match.group(1) if match else None
+
+    def _sanitize_script(self, script: str) -> str:
+        """Fix known shell-command incompatibilities in model-generated scripts."""
+        sanitized = script
+        replacements = {
+            "--max-redirects": "--max-redirs",
+        }
+
+        for old, new in replacements.items():
+            if old in sanitized:
+                sanitized = sanitized.replace(old, new)
+                logger.warning(
+                    f"[DockerRunner] Replaced unsupported flag '{old}' with '{new}'"
+                )
+
+        return sanitized
 
     def _image_exists(self) -> bool:
         try:
